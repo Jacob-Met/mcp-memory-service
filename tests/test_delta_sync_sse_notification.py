@@ -440,3 +440,25 @@ async def test_consolidation_events_share_unique_run_identity(capture_sse):
     ids = [e.data.get('run_id') for e in capture_sse.events]
     assert all(isinstance(run_id, str) and run_id for run_id in ids)
     assert len(set(ids)) == 1
+
+async def test_compression_cluster_counts_flow_over_existing_scheduler_sse(capture_sse):
+    sched = _make_scheduler()
+
+    async def consolidate(horizon, *, progress_callback):
+        await progress_callback("compression_clusters", 3, 10, 42)
+        await progress_callback("compression", 4, 6, 42)
+        return MagicMock()
+
+    sched.consolidator.consolidate = consolidate
+    await sched._run_consolidation_job("weekly")
+    assert [event.event_type for event in capture_sse.events] == [
+        "consolidation_started", "consolidation_progress",
+        "consolidation_progress", "consolidation_completed",
+    ]
+    data = capture_sse.events[1].data
+    assert {key: data[key] for key in (
+        "time_horizon", "phase", "completed", "total", "memories_selected",
+    )} == {
+        "time_horizon": "weekly", "phase": "compression_clusters",
+        "completed": 3, "total": 10, "memories_selected": 42,
+    }

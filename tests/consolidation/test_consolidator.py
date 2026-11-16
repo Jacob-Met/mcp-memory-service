@@ -626,9 +626,16 @@ async def test_phase_progress_counts_actual_pipeline_steps(mock_storage, consoli
     report = await consolidator.consolidate("weekly", progress_callback=capture)
     assert report.memories_processed > 0
     assert progress
-    total = progress[0][2]
-    assert [p[1] for p in progress] == list(range(1, total + 1))
-    assert all(p[2] == total for p in progress)
+    # A cluster is work within the compression stage, not a completed stage.
+    stages = [p for p in progress if p[0] != "compression_clusters"]
+    clusters = [p for p in progress if p[0] == "compression_clusters"]
+    total = stages[0][2]
+    assert [p[1] for p in stages] == list(range(1, total + 1))
+    assert all(p[2] == total for p in stages)
     assert all(p[3] == report.memories_processed for p in progress)
-    assert len({p[0] for p in progress}) == total
-    assert progress[-1][0] == "finalization"
+    assert len({p[0] for p in stages}) == total
+    assert stages[-1][0] == "finalization"
+    assert clusters, "the real compression phase should surface in-flight work"
+    assert clusters[-1][1] == clusters[-1][2] > 0
+    assert all(0 < p[1] <= p[2] for p in clusters)
+    assert progress.index(clusters[-1]) < progress.index(stages[-2])

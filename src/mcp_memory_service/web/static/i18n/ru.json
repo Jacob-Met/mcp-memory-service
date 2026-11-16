@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "Показано {shown} из {total} тегов",
   "island.source.consolidation": "Консолидация воспоминаний",
   "consolidation.status.running": "Идёт консолидация воспоминаний",
+  "consolidation.status.clusters": "Обработано кластеров: {completed} из {total}",
   "consolidation.status.stages": "Завершено этапов: {completed} из {total}",
   "consolidation.status.complete": "Консолидация завершена",
   "consolidation.status.failed": "Ошибка консолидации"

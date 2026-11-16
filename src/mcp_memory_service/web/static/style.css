@@ -1627,7 +1627,7 @@ body.dark-mode .form-group label {
     gap: var(--space-2);
     /* A fixed width: the search field next to it must not move when the text changes.
        A longer text is cut with an ellipsis and stands in full in the panel. */
-    width: 11rem;
+    width: 16rem;
     max-width: 100%;
     min-height: 28px;
     padding: var(--space-1) var(--space-3);
@@ -1654,6 +1654,13 @@ body.dark-mode .form-group label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* A real completed/total fraction remains readable when the sentence must hide. */
+.status-island-brief {
+    display: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .status-island-dot {
@@ -1801,10 +1808,9 @@ body.dark-mode .form-group label {
     color: var(--primary-text);
 }
 
-/* Where the logo row has no room for the text (phones, and the one-row header up to
-   1200px), the capsule is the dot and the chevron. The text is in the panel and in the accessible name, and an error
-   is marked by a red dot and a red border only: a sighted reader has to open the
-   panel to read what failed. */
+/* Where the logo row has no room for the full sentence, show a compact
+   measured-work fraction alongside the dot when available. Other statuses
+   remain the dot and chevron, with their full text in the accessible name and panel. */
 @media (max-width: 480px), (min-width: 769px) and (max-width: 1200px) {
     .status-island-text {
         position: absolute;
@@ -1819,6 +1825,10 @@ body.dark-mode .form-group label {
         padding: var(--space-1) var(--space-2);
     }
 
+    .status-island-brief:not([hidden]) {
+        display: inline;
+    }
+
     /* The count would change the capsule's width; the panel lists every source. */
     .status-island-count {
         display: none;
@@ -1830,6 +1840,14 @@ body.dark-mode .form-group label {
     .logo-section .app-title,
     .logo-section .version-badge {
         flex-shrink: 0;
+    }
+}
+
+/* At the narrowest phone widths the live work count matters more than the
+   decorative version badge; prevent the capsule from sliding off-screen. */
+@media (max-width: 360px) {
+    .logo-section .version-badge {
+        display: none;
     }
 }
 

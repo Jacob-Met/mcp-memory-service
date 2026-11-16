@@ -28,6 +28,15 @@
     const RANK = { error: 4, busy: 3, success: 2, ready: 1 };
     const SETTLE_MS = 5000;
 
+    /** Short factual fraction for tight headers; derived from measured counts, not time guesses. */
+    function compactProgressText(source) {
+        const vars = source?.text?.vars || {};
+        if (source?.state !== 'busy' || !Number.isInteger(vars.completed)
+            || !Number.isInteger(vars.total) || vars.total <= 0
+            || vars.completed < 0 || vars.completed > vars.total) return '';
+        return `${vars.completed}/${vars.total}`;
+    }
+
     /** A percentage only when it is a real number from 0 to 100; anything else is "unknown" or nothing. */
     function normalizeProgress(value) {
         if (value === null || value === undefined) return null;
@@ -150,6 +159,8 @@
         toggle.setAttribute('aria-controls', 'statusIslandPanel');
         el('span', 'status-island-dot', toggle).setAttribute('aria-hidden', 'true');
         const text = el('span', 'status-island-text', toggle);
+        const brief = el('span', 'status-island-brief', toggle);
+        brief.hidden = true;
         const more = el('span', 'status-island-count', toggle);
         const hint = el('span', 'sr-only', toggle);
         el('span', 'status-island-chevron', toggle).setAttribute('aria-hidden', 'true');
@@ -229,6 +240,9 @@
             host.dataset.state = lead.state;
             const leadText = say(lead.text);
             text.textContent = leadText;
+            const fraction = compactProgressText(lead);
+            brief.textContent = fraction;
+            brief.hidden = !fraction;
             toggle.title = leadText;
             hint.textContent = ', ' + t('island.details', 'Details');
             // Other sources that are not simply "ready" are counted next to the lead.
@@ -281,6 +295,7 @@
 
     StatusIsland.createModel = createModel;
     StatusIsland.normalizeProgress = normalizeProgress;
+    StatusIsland.compactProgressText = compactProgressText;
 
     if (typeof module === 'object' && module.exports) module.exports = StatusIsland;
     else root.StatusIsland = StatusIsland;

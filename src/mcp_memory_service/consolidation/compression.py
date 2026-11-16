@@ -75,8 +75,9 @@ class SemanticCompressionEngine(ConsolidationBase):
             'code_blocks': re.compile(r'```[\s\S]*?```|`[^`]+`')
         }
     
-    async def process(self, clusters: List[MemoryCluster], memories: List[Memory], **kwargs) -> List[CompressionResult]:
-        """Compress memory clusters into condensed representations (parallel)."""
+    async def process(self, clusters: List[MemoryCluster], memories: List[Memory],
+                      progress_callback=None, **kwargs) -> List[CompressionResult]:
+        """Compress clusters in parallel; optionally report measured work, at most 17 updates."""
         if not clusters:
             return []
 
@@ -96,7 +97,37 @@ class SemanticCompressionEngine(ConsolidationBase):
             if cluster_memories:
                 tasks.append(self._compress_cluster(cluster, cluster_memories))
 
-        # Run all cluster compressions concurrently
+        # An individual cluster can take seconds. Without intra-phase updates
+        # the dashboard looks stuck for the entire compression phase. Count the
+        # eligible clusters actually attempted (not compressed outputs), preserve
+        # input-order results, and limit SSE traffic regardless of database size.
+        if progress_callback and tasks:
+            total = len(tasks)
+            interval = max(1, (total + 15) // 16)
+            completed = 0
+            notify_lock = asyncio.Lock()
+
+            async def observed(task):
+                nonlocal completed
+                try:
+                    return await task
+                finally:
+                    async with notify_lock:
+                        completed += 1
+                        if completed == 1 or completed % interval == 0 or completed == total:
+                            try:
+                                await progress_callback(completed, total)
+                            except Exception as exc:
+                                # Telemetry failures must never change the memory result.
+                                self.logger.debug("Cluster progress unavailable: %s", _sanitize_log_value(exc))
+                            # Compression's async methods can be entirely CPU
+                            # synchronous. Yield after a bounded progress update
+                            # so the SSE response can actually flush mid-run.
+                            await asyncio.sleep(0)
+
+            tasks = [observed(task) for task in tasks]
+
+        # Run all cluster compressions concurrently; keep their original order.
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         compression_results = []

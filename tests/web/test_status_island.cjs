@@ -481,7 +481,8 @@ test('consolidation SSE handlers exist and work without the status island', () =
 
 test('consolidation text keys exist in all locale catalogs', () => {
     const keys = ['island.source.consolidation', 'consolidation.status.running',
-                  'consolidation.status.stages', 'consolidation.status.complete', 'consolidation.status.failed'];
+                  'consolidation.status.stages', 'consolidation.status.clusters',
+                  'consolidation.status.complete', 'consolidation.status.failed'];
     const locales = fs.readdirSync(STATIC + 'i18n').filter((file) => file.endsWith('.json'));
     assert.equal(locales.length, 11);
     for (const file of locales) {
@@ -499,4 +500,29 @@ test('two concurrent consolidation runs at the same horizon have separate status
     assert.equal(model.get('consolidation-two').state, 'busy');
     assert.equal(model.get('consolidation-two').text.vars.completed, 2);
     assert.equal(model.get('consolidation-one').state, 'success');
+});
+
+test('compression cluster counts are not mislabelled as stage counts', () => {
+    const { app, model } = syncDashboard();
+    app.handleConsolidationStarted({ time_horizon: 'weekly' });
+    app.handleConsolidationProgress({ time_horizon: 'weekly', phase: 'compression_clusters', completed: 13, total: 50 });
+    const entry = model.get('consolidation-weekly');
+    assert.equal(entry.state, 'busy');
+    assert.equal(entry.text.key, 'consolidation.status.clusters');
+    assert.deepEqual(entry.text.vars, { completed: 13, total: 50 });
+    assert.equal(entry.progress, 'unknown', 'clusters are not a time-percentage');
+    app.handleConsolidationProgress({ time_horizon: 'weekly', phase: 'compression', completed: 4, total: 6 });
+    assert.equal(model.get('consolidation-weekly').text.key, 'consolidation.status.stages');
+});
+
+test('a mobile capsule exposes real completed/total work instead of a dot alone', () => {
+    const entry = (state, completed, total) => ({
+        state, text: { key: 'consolidation.status.clusters', vars: { completed, total } },
+    });
+    assert.equal(StatusIsland.compactProgressText(entry('busy', 13, 50)), '13/50');
+    assert.equal(StatusIsland.compactProgressText(entry('busy', 0, 50)), '0/50');
+    assert.equal(StatusIsland.compactProgressText(entry('success', 50, 50)), '');
+    assert.equal(StatusIsland.compactProgressText(entry('busy', 51, 50)), '');
+    assert.equal(StatusIsland.compactProgressText(entry('busy', 1, 0)), '');
+    assert.equal(StatusIsland.compactProgressText({ state: 'busy', text: { key: 'syncing' } }), '');
 });

@@ -1958,8 +1958,11 @@ class MemoryDashboard {
             state: 'busy',
             progress: 'unknown',
             text: {
-                key: 'consolidation.status.stages',
-                fallback: '{completed} of {total} stages finished',
+                key: data.phase === 'compression_clusters'
+                    ? 'consolidation.status.clusters' : 'consolidation.status.stages',
+                fallback: data.phase === 'compression_clusters'
+                    ? '{completed} of {total} clusters processed'
+                    : '{completed} of {total} stages finished',
                 vars: { completed: data.completed, total: data.total },
             },
         });

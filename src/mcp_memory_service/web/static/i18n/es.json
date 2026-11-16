@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "Mostrando {shown} de {total} etiquetas",
   "island.source.consolidation": "Consolidación de memorias",
   "consolidation.status.running": "Consolidando memorias",
+  "consolidation.status.clusters": "{completed} de {total} grupos procesados",
   "consolidation.status.stages": "{completed} de {total} etapas completadas",
   "consolidation.status.complete": "Consolidación completada",
   "consolidation.status.failed": "Error en la consolidación"
