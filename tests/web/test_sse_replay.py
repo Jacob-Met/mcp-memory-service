@@ -190,3 +190,89 @@ async def test_replay_disabled_when_buffer_size_zero():
 
     assert len(events) == 1
     assert "replay" not in events[0].data
+
+
+@pytest.mark.asyncio
+async def test_fresh_viewer_joins_an_already_running_consolidation():
+    """The late dashboard should not wait for the next phase (which may be minutes away)."""
+    manager = SSEManager(replay_buffer_size=0)
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_started', data={'time_horizon': 'daily'}
+    ))
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_progress',
+        data={'time_horizon': 'daily', 'phase': 'clustering', 'completed': 2,
+              'total': 4, 'memories_selected': 15},
+    ))
+
+    queue = await manager.add_connection('late-viewer', _FakeRequest())
+    events = await _drain(queue)
+    assert [e.event_type for e in events] == [
+        'connection_established', 'consolidation_started', 'consolidation_progress',
+    ]
+    assert events[-1].data['completed'] == 2
+
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_completed',
+        data={'time_horizon': 'daily', 'success': True},
+    ))
+    queue = await manager.add_connection('after-run', _FakeRequest())
+    assert [e.event_type for e in await _drain(queue)] == ['connection_established']
+
+
+@pytest.mark.asyncio
+async def test_late_viewer_only_gets_active_consolidations_not_other_memories():
+    manager = SSEManager(replay_buffer_size=3)
+    await manager.broadcast_event(SSEEvent(event_type='memory_stored', data={'private': 'secret'}))
+    for horizon in ('daily', 'weekly'):
+        await manager.broadcast_event(SSEEvent(
+            event_type='consolidation_started', data={'time_horizon': horizon}
+        ))
+    queue = await manager.add_connection('scoped-viewer', _FakeRequest(), stores={'team-a'})
+    events = await _drain(queue)
+    assert [e.event_type for e in events] == [
+        'connection_established', 'consolidation_started', 'consolidation_started',
+    ]
+    assert {e.data['time_horizon'] for e in events[1:]} == {'daily', 'weekly'}
+
+
+@pytest.mark.asyncio
+async def test_filtered_broadcast_does_not_appear_in_late_viewer_snapshot():
+    manager = SSEManager(replay_buffer_size=3)
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_started', data={'time_horizon': 'weekly'}
+    ), connection_filter={'another-connection'})
+    queue = await manager.add_connection('late', _FakeRequest())
+    assert [e.event_type for e in await _drain(queue)] == ['connection_established']
+
+
+@pytest.mark.asyncio
+async def test_late_viewer_gets_latest_measured_phase_without_duplicate_replay():
+    manager = SSEManager(replay_buffer_size=10)
+    start = SSEEvent(event_type='consolidation_started', data={'time_horizon': 'weekly'})
+    first = SSEEvent(event_type='consolidation_progress', data={
+        'time_horizon': 'weekly', 'completed': 1, 'total': 4,
+    })
+    latest = SSEEvent(event_type='consolidation_progress', data={
+        'time_horizon': 'weekly', 'completed': 3, 'total': 4,
+    })
+    for event in (start, first, latest):
+        await manager.broadcast_event(event)
+
+    new = await manager.add_connection('new', _FakeRequest())
+    assert [event.event_id for event in (await _drain(new))[1:]] == [start.event_id, latest.event_id]
+
+    resumed = await manager.add_connection('resumed', _FakeRequest(), last_event_id=first.event_id)
+    events = await _drain(resumed)
+    assert [event.event_id for event in events[1:]] == [latest.event_id], 'older start must not erase restored progress'
+
+
+@pytest.mark.asyncio
+async def test_stopped_sse_manager_does_not_report_stale_active_consolidation():
+    manager = SSEManager(replay_buffer_size=0)
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_started', data={'time_horizon': 'daily'},
+    ))
+    await manager.stop()
+    queue = await manager.add_connection('after-restart', _FakeRequest())
+    assert [event.event_type for event in await _drain(queue)] == ['connection_established']
