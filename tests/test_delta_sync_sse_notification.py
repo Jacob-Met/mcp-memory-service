@@ -164,8 +164,9 @@ async def test_consolidation_notifies_dashboard(capture_sse):
     sched = _make_scheduler()
     sched.consolidator.consolidate = AsyncMock(return_value=MagicMock())
     await sched._run_consolidation_job('daily')
-    assert capture_sse.events[0].event_type == 'consolidation_completed'
-    assert capture_sse.events[0].data == {'time_horizon': 'daily', 'success': True}
+    assert capture_sse.events[0].event_type == 'consolidation_started'
+    assert capture_sse.events[-1].event_type == 'consolidation_completed'
+    assert capture_sse.events[-1].data == {'time_horizon': 'daily', 'success': True}
 
 
 @pytest.mark.asyncio
@@ -250,3 +251,71 @@ async def test_paginated_transport_failure_reports_unknown_counts(
         assert event.data['pulled'] == (None if failed_direction == 'pull' else 0)
     finally:
         await storage.close()
+
+
+@pytest.mark.asyncio
+async def test_consolidation_announces_start_before_work(capture_sse):
+    from unittest.mock import AsyncMock
+
+    sched = _make_scheduler()
+
+    async def consolidate(horizon, **kwargs):
+        assert capture_sse.events[0].event_type == "consolidation_started"
+        assert capture_sse.events[0].data == {"time_horizon": horizon}
+        return MagicMock()
+
+    sched.consolidator.consolidate = AsyncMock(side_effect=consolidate)
+    await sched._run_consolidation_job("daily")
+    assert [event.event_type for event in capture_sse.events] == [
+        "consolidation_started", "consolidation_completed"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_consolidation_forwards_measured_phase_progress(capture_sse):
+    sched = _make_scheduler()
+
+    async def consolidate(horizon, *, progress_callback):
+        await progress_callback("clustering", 2, 4, 12)
+        return MagicMock()
+
+    sched.consolidator.consolidate = consolidate
+    await sched._run_consolidation_job("weekly")
+    assert [event.event_type for event in capture_sse.events] == [
+        "consolidation_started", "consolidation_progress", "consolidation_completed"
+    ]
+    assert capture_sse.events[1].data == {
+        "time_horizon": "weekly",
+        "phase": "clustering",
+        "completed": 2,
+        "total": 4,
+        "memories_selected": 12,
+    }
+
+
+@pytest.mark.asyncio
+async def test_consolidation_sse_failure_does_not_break_run(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    sched = _make_scheduler()
+    sched.consolidator.consolidate = AsyncMock(return_value=MagicMock())
+    monkeypatch.setattr("mcp_memory_service.web.sse.sse_manager.broadcast_event",
+                        AsyncMock(side_effect=RuntimeError("SSE unavailable")))
+    await sched._run_consolidation_job("daily")
+    assert sched.execution_stats["successful_jobs"] == 1
+
+
+@pytest.mark.asyncio
+async def test_consolidation_failure_still_closes_progress(capture_sse):
+    sched = _make_scheduler()
+
+    async def fail(*args, **kwargs):
+        raise RuntimeError("storage unavailable")
+
+    sched.consolidator.consolidate = fail
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        await sched._run_consolidation_job("daily")
+    assert [event.event_type for event in capture_sse.events] == [
+        "consolidation_started", "consolidation_completed"
+    ]
+    assert capture_sse.events[-1].data["success"] is False

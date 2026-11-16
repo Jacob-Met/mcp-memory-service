@@ -744,5 +744,10 @@
   "settings.quality.loadFailed": "✗ वर्तमान सेटिंग्स लोड नहीं हो सकीं: {error}। पुनः प्रयास करने के लिए इस टैब को दोबारा खोलें।",
   "settings.quality.saveHint": "सेटिंग्स .env में सहेजी गई हैं। बदलाव लागू करने के लिए सर्वर पुनः प्रारंभ होगा।",
   "manage.tags.minimumCount": "कम से कम N बार उपयोग किए गए टैग दिखाएँ",
-  "manage.tags.showingCount": "कुल {total} टैग में से {shown} दिखाए जा रहे हैं"
+  "manage.tags.showingCount": "कुल {total} टैग में से {shown} दिखाए जा रहे हैं",
+  "island.source.consolidation": "स्मृति समेकन",
+  "consolidation.status.running": "स्मृतियों का समेकन जारी है",
+  "consolidation.status.stages": "{total} में से {completed} चरण पूरे हुए",
+  "consolidation.status.complete": "समेकन पूरा हुआ",
+  "consolidation.status.failed": "समेकन विफल हुआ"
 }

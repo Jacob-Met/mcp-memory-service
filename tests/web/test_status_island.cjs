@@ -427,3 +427,65 @@ test('the catalog keys the sync source uses exist in en.json, and #syncStatus is
     assert.deepEqual([...keys].filter((key) => !catalog[key]), []);
     assert.ok(!fs.readFileSync(STATIC + 'app.js', 'utf8').includes("getElementById('syncStatus')"));
 });
+
+// ---- Live consolidation source (#2011) ----
+
+test('consolidation start and measured phase counts appear on the island', () => {
+    const { app, model } = syncDashboard();
+    app.handleConsolidationStarted({ time_horizon: 'weekly' });
+    let entry = model.get('consolidation-weekly');
+    assert.equal(entry.state, 'busy');
+    assert.equal(entry.progress, 'unknown', 'stages are counts, not time-percent estimates');
+    assert.equal(entry.text.key, 'consolidation.status.running');
+    app.handleConsolidationProgress({ time_horizon: 'weekly', phase: 'clustering', completed: 2, total: 4, memories_selected: 12 });
+    entry = model.get('consolidation-weekly');
+    assert.equal(entry.state, 'busy');
+    assert.equal(entry.progress, 'unknown');
+    assert.equal(entry.text.key, 'consolidation.status.stages');
+    assert.equal(entry.text.vars.completed, 2);
+    assert.equal(entry.text.vars.total, 4);
+    assert.deepEqual(app.toasts, []);
+});
+
+test('consolidation success settles, failure stays dismissible, horizons do not collide', () => {
+    const { app, model } = syncDashboard();
+    app.handleConsolidationStarted({ time_horizon: 'daily' });
+    app.handleConsolidationStarted({ time_horizon: 'weekly' });
+    app.handleConsolidationCompleted({ time_horizon: 'daily', success: true });
+    const done = model.get('consolidation-daily');
+    assert.equal(done.state, 'success');
+    assert.equal(done.text.key, 'consolidation.status.complete');
+    assert.equal(model.expire('consolidation-daily', done.seq), true);
+    assert.equal(model.get('consolidation-daily'), null);
+    assert.equal(model.get('consolidation-weekly').state, 'busy');
+    app.handleConsolidationCompleted({ time_horizon: 'weekly', success: false });
+    const failed = model.get('consolidation-weekly');
+    assert.equal(failed.state, 'error');
+    assert.equal(failed.dismissible, true);
+    assert.equal(failed.text.key, 'consolidation.status.failed');
+});
+
+test('consolidation SSE handlers exist and work without the status island', () => {
+    const source = fs.readFileSync(STATIC + 'app.js', 'utf8');
+    for (const event of ['consolidation_started', 'consolidation_progress', 'consolidation_completed']) {
+        assert.ok(source.includes(`addEventListener('${event}'`));
+    }
+    const { app } = dashboard({ island: null });
+    app._scheduleDashboardRefresh = () => {};
+    assert.doesNotThrow(() => {
+        app.handleConsolidationStarted({ time_horizon: 'daily' });
+        app.handleConsolidationProgress({ time_horizon: 'daily', completed: 2, total: 4 });
+        app.handleConsolidationCompleted({ time_horizon: 'daily', success: true });
+    });
+});
+
+test('consolidation text keys exist in all locale catalogs', () => {
+    const keys = ['island.source.consolidation', 'consolidation.status.running',
+                  'consolidation.status.stages', 'consolidation.status.complete', 'consolidation.status.failed'];
+    const locales = fs.readdirSync(STATIC + 'i18n').filter((file) => file.endsWith('.json'));
+    assert.equal(locales.length, 11);
+    for (const file of locales) {
+        const catalog = JSON.parse(fs.readFileSync(STATIC + 'i18n/' + file, 'utf8'));
+        assert.deepEqual(keys.filter((key) => !catalog[key]), [], file);
+    }
+});

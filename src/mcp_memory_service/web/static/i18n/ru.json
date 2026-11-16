@@ -744,5 +744,10 @@
   "settings.quality.loadFailed": "✗ Не удалось загрузить текущие настройки: {error}. Откройте эту вкладку повторно.",
   "settings.quality.saveHint": "Сохранено в .env. Для применения изменений сервер будет перезапущен.",
   "manage.tags.minimumCount": "Показывать теги, использованные не менее N раз",
-  "manage.tags.showingCount": "Показано {shown} из {total} тегов"
+  "manage.tags.showingCount": "Показано {shown} из {total} тегов",
+  "island.source.consolidation": "Консолидация воспоминаний",
+  "consolidation.status.running": "Идёт консолидация воспоминаний",
+  "consolidation.status.stages": "Завершено этапов: {completed} из {total}",
+  "consolidation.status.complete": "Консолидация завершена",
+  "consolidation.status.failed": "Ошибка консолидации"
 }

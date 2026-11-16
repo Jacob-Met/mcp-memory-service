@@ -744,5 +744,10 @@
   "toast.uploadStartedBatch": "Subida por lotes iniciada para {count} archivos",
   "toast.uploadStartedSingle": "Subida iniciada para {name}",
   "manage.tags.minimumCount": "Mostrar etiquetas usadas al menos N veces",
-  "manage.tags.showingCount": "Mostrando {shown} de {total} etiquetas"
+  "manage.tags.showingCount": "Mostrando {shown} de {total} etiquetas",
+  "island.source.consolidation": "Consolidación de memorias",
+  "consolidation.status.running": "Consolidando memorias",
+  "consolidation.status.stages": "{completed} de {total} etapas completadas",
+  "consolidation.status.complete": "Consolidación completada",
+  "consolidation.status.failed": "Error en la consolidación"
 }

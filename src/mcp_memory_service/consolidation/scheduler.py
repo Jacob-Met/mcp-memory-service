@@ -887,10 +887,36 @@ class ConsolidationScheduler:
         """Execute a consolidation job for the specified time horizon."""
         job_start_time = datetime.now()
         self.logger.info("Starting scheduled %s consolidation", _sanitize_log_value(time_horizon))
-        
+
+        async def notify(event_type: str, data: dict) -> None:
+            # Monitoring must never interrupt or change a consolidation result.
+            try:
+                from ..web.sse import SSEEvent, sse_manager
+
+                await sse_manager.broadcast_event(
+                    SSEEvent(event_type=event_type, data=data)
+                )
+            except Exception as exc:
+                self.logger.debug(
+                    "Unable to notify dashboard of consolidation: %s",
+                    _sanitize_log_value(exc),
+                )
+
+        async def progress(phase: str, completed: int, total: int, selected: int) -> None:
+            await notify("consolidation_progress", {
+                "time_horizon": time_horizon,
+                "phase": phase,
+                "completed": completed,
+                "total": total,
+                "memories_selected": selected,
+            })
+
+        await notify("consolidation_started", {"time_horizon": time_horizon})
         try:
             # Run the consolidation
-            report = await self.consolidator.consolidate(time_horizon)
+            report = await self.consolidator.consolidate(
+                time_horizon, progress_callback=progress
+            )
             
             # Run belief derivation (opt-in via MCP_BELIEFS_ENABLED)
             belief_stats = {}
@@ -993,15 +1019,10 @@ class ConsolidationScheduler:
             raise
         finally:
             # Consolidation can change counts even if a later step fails.
-            try:
-                from ..web.sse import SSEEvent, sse_manager
-
-                await sse_manager.broadcast_event(SSEEvent(
-                    event_type="consolidation_completed",
-                    data={"time_horizon": time_horizon, "success": job_record["status"] == "success"},
-                ))
-            except Exception as exc:
-                self.logger.debug("Unable to notify dashboard of consolidation: %s", _sanitize_log_value(exc))
+            await notify("consolidation_completed", {
+                "time_horizon": time_horizon,
+                "success": job_record["status"] == "success",
+            })
 
     def _add_job_to_history(self, job_record: Dict[str, Any]):
         """Add job record to history with size limit."""

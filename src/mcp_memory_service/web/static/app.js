@@ -988,8 +988,28 @@ class MemoryDashboard {
             this._scheduleDashboardRefresh();
         });
 
-        this.eventSource.addEventListener('consolidation_completed', () => {
-            this._scheduleDashboardRefresh();
+        this.eventSource.addEventListener('consolidation_started', (event) => {
+            try {
+                this.handleConsolidationStarted(JSON.parse(event.data));
+            } catch (error) {
+                console.error('Error parsing consolidation_started event:', error);
+            }
+        });
+
+        this.eventSource.addEventListener('consolidation_progress', (event) => {
+            try {
+                this.handleConsolidationProgress(JSON.parse(event.data));
+            } catch (error) {
+                console.error('Error parsing consolidation_progress event:', error);
+            }
+        });
+
+        this.eventSource.addEventListener('consolidation_completed', (event) => {
+            try {
+                this.handleConsolidationCompleted(JSON.parse(event.data));
+            } catch (error) {
+                console.error('Error parsing consolidation_completed event:', error);
+            }
         });
 
         this.eventSource.onerror = (error) => {
@@ -1906,6 +1926,52 @@ class MemoryDashboard {
                 // This is a simplified update - in practice you'd match by upload ID
                 this.loadUploadHistory(); // For now, just refresh the entire history
             }
+        });
+    }
+
+    /** One island row per scheduled horizon; phase counts are not time estimates. */
+    _reportConsolidation(data, entry) {
+        const horizons = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'incremental'];
+        if (!this.statusIsland || !horizons.includes(data?.time_horizon)) return;
+        this.statusIsland.report(`consolidation-${data.time_horizon}`, {
+            ...entry,
+            label: { key: 'island.source.consolidation', fallback: 'Memory consolidation' },
+        });
+    }
+
+    handleConsolidationStarted(data) {
+        this._reportConsolidation(data, {
+            state: 'busy',
+            progress: 'unknown',
+            text: { key: 'consolidation.status.running', fallback: 'Consolidating memories' },
+        });
+    }
+
+    handleConsolidationProgress(data) {
+        // Reject corrupt counts rather than manufacturing a percentage or showing
+        // a fraction greater than the actual planned number of stages.
+        if (!Number.isInteger(data?.completed) || !Number.isInteger(data?.total)
+            || data.total <= 0 || data.completed < 0 || data.completed > data.total) return;
+        this._reportConsolidation(data, {
+            state: 'busy',
+            progress: 'unknown',
+            text: {
+                key: 'consolidation.status.stages',
+                fallback: '{completed} of {total} stages finished',
+                vars: { completed: data.completed, total: data.total },
+            },
+        });
+    }
+
+    handleConsolidationCompleted(data) {
+        this._scheduleDashboardRefresh();
+        this._reportConsolidation(data, data?.success === true ? {
+            state: 'success',
+            text: { key: 'consolidation.status.complete', fallback: 'Consolidation complete' },
+        } : {
+            state: 'error',
+            dismissible: true,
+            text: { key: 'consolidation.status.failed', fallback: 'Consolidation failed' },
         });
     }
 
