@@ -517,13 +517,19 @@ class DreamInspiredConsolidator:
         return associations
 
     async def _run_compression_phase(
-        self, clusters: List, memories: List[Memory]
+        self, clusters: List, memories: List[Memory],
+        progress_callback: Optional[ConsolidationProgress] = None,
     ) -> List:
         """Phase 4/6: compress clusters and store compressed results."""
         self.logger.info("🗜️ Phase 4/6: Compressing memory clusters...")
         performance_start = time.time()
+        async def cluster_progress(completed: int, total: int) -> None:
+            await progress_callback("compression_clusters", completed, total, len(memories))
+
         compression_results = await self.compression_engine.process(
-            clusters, memories
+            clusters, memories, **(
+                {"progress_callback": cluster_progress} if progress_callback else {}
+            )
         )
         self.logger.info(
             "✓ Compression completed in %.1fs, compressed %s clusters",
@@ -604,7 +610,8 @@ class DreamInspiredConsolidator:
         The denominator is a real count of planned stages, not a duration estimate.
         Compression may be a no-op when clustering produces no clusters; that
         stage is still visited and counted once, without claiming memories were
-        compressed. One event per eligible stage bounds SSE traffic on large DBs.
+        compressed. Stage callbacks fire once per eligible stage; compression also
+        reports bounded, measured per-cluster updates before its stage finishes.
         """
         enabled = {
             "relevance": self.config.decay_enabled,
@@ -646,7 +653,11 @@ class DreamInspiredConsolidator:
         await phase_done("associations")
 
         if enabled["compression"] and clusters:
-            compression_results = await self._run_compression_phase(clusters, memories)
+            compression_results = await self._run_compression_phase(
+                clusters, memories, **(
+                    {"progress_callback": progress_callback} if progress_callback else {}
+                )
+            )
             report.memories_compressed = len(compression_results)
         await phase_done("compression")
 

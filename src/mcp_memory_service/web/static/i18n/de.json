@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "{shown} von {total} Tags werden angezeigt",
   "island.source.consolidation": "Speicherkonsolidierung",
   "consolidation.status.running": "Erinnerungen werden konsolidiert",
+  "consolidation.status.clusters": "{completed} von {total} Clustern verarbeitet",
   "consolidation.status.stages": "{completed} von {total} Phasen abgeschlossen",
   "consolidation.status.complete": "Konsolidierung abgeschlossen",
   "consolidation.status.failed": "Konsolidierung fehlgeschlagen"

@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "Affichage de {shown} tags sur {total}",
   "island.source.consolidation": "Consolidation des souvenirs",
   "consolidation.status.running": "Consolidation des souvenirs en cours",
+  "consolidation.status.clusters": "{completed} groupes sur {total} traités",
   "consolidation.status.stages": "{completed} étapes sur {total} terminées",
   "consolidation.status.complete": "Consolidation terminée",
   "consolidation.status.failed": "Échec de la consolidation"

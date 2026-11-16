@@ -1,7 +1,9 @@
 """Unit tests for the semantic compression engine."""
 
+import asyncio
 import pytest
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from mcp_memory_service.consolidation.compression import (
     SemanticCompressionEngine, 
@@ -961,3 +963,43 @@ class TestAggregateMetadataPrefixNesting:
                 assert contiguous <= 1, (
                     f"After run {run}, key {key!r} has {contiguous} leading prefix(es)"
                 )
+
+@pytest.mark.asyncio
+async def test_cluster_progress_is_measured_ordered_and_bounded(consolidation_config, monkeypatch):
+    """A large compression phase should report actual completed clusters, not minutes guessed."""
+    engine = SemanticCompressionEngine(consolidation_config)
+    memories = [SimpleNamespace(content_hash='h', tags=[], memory_type='standard')]
+    clusters = [SimpleNamespace(cluster_id=str(i), memory_hashes=['h']) for i in range(81)]
+    seen = []
+
+    async def compress(cluster, _memories):
+        await asyncio.sleep(0 if int(cluster.cluster_id) % 2 else 0.001)
+        return cluster.cluster_id
+
+    async def report(completed, total):
+        await asyncio.sleep(0.002 if completed % 2 else 0)
+        seen.append((completed, total))
+
+    monkeypatch.setattr(engine, '_compress_cluster', compress)
+    result = await engine.process(clusters, memories, progress_callback=report)
+    assert result == [str(i) for i in range(81)], 'compression output remains source ordered'
+    assert seen[0] == (1, 81)
+    assert seen[-1] == (81, 81)
+    assert all(a < b for (a, _), (b, _) in zip(seen, seen[1:]))
+    assert len(seen) <= 20, 'do not emit SSE per cluster on large databases'
+
+
+@pytest.mark.asyncio
+async def test_cluster_progress_failure_never_discards_valid_compression(consolidation_config, monkeypatch):
+    engine = SemanticCompressionEngine(consolidation_config)
+    memories = [SimpleNamespace(content_hash='h', tags=[], memory_type='standard')]
+    clusters = [SimpleNamespace(cluster_id='abc', memory_hashes=['h'])]
+
+    async def compress(cluster, _memories):
+        return cluster.cluster_id
+
+    async def disconnected(_completed, _total):
+        raise RuntimeError('viewer disconnected')
+
+    monkeypatch.setattr(engine, '_compress_cluster', compress)
+    assert await engine.process(clusters, memories, progress_callback=disconnected) == ['abc']

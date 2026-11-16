@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "Menampilkan {shown} dari {total} tag",
   "island.source.consolidation": "Konsolidasi memori",
   "consolidation.status.running": "Memori sedang dikonsolidasikan",
+  "consolidation.status.clusters": "{completed} dari {total} klaster diproses",
   "consolidation.status.stages": "{completed} dari {total} tahap selesai",
   "consolidation.status.complete": "Konsolidasi selesai",
   "consolidation.status.failed": "Konsolidasi gagal"

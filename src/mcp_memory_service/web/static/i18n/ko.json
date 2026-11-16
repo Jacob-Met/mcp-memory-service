@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "전체 {total}개 중 {shown}개 태그 표시",
   "island.source.consolidation": "메모리 통합",
   "consolidation.status.running": "메모리를 통합하는 중",
+  "consolidation.status.clusters": "{total}개 클러스터 중 {completed}개 처리",
   "consolidation.status.stages": "{total}단계 중 {completed}단계 완료",
   "consolidation.status.complete": "통합 완료",
   "consolidation.status.failed": "통합 실패"

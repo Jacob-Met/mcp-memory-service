@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "कुल {total} टैग में से {shown} दिखाए जा रहे हैं",
   "island.source.consolidation": "स्मृति समेकन",
   "consolidation.status.running": "स्मृतियों का समेकन जारी है",
+  "consolidation.status.clusters": "{total} में से {completed} क्लस्टर संसाधित",
   "consolidation.status.stages": "{total} में से {completed} चरण पूरे हुए",
   "consolidation.status.complete": "समेकन पूरा हुआ",
   "consolidation.status.failed": "समेकन विफल हुआ"

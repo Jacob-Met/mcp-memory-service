@@ -747,6 +747,7 @@
   "manage.tags.showingCount": "显示 {shown} 个标签，共 {total} 个",
   "island.source.consolidation": "记忆整合",
   "consolidation.status.running": "正在整合记忆",
+  "consolidation.status.clusters": "已处理 {completed}/{total} 个聚类",
   "consolidation.status.stages": "已完成 {completed}/{total} 个阶段",
   "consolidation.status.complete": "整合已完成",
   "consolidation.status.failed": "整合失败"
