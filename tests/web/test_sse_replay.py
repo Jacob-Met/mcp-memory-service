@@ -276,3 +276,26 @@ async def test_stopped_sse_manager_does_not_report_stale_active_consolidation():
     await manager.stop()
     queue = await manager.add_connection('after-restart', _FakeRequest())
     assert [event.event_type for event in await _drain(queue)] == ['connection_established']
+
+
+@pytest.mark.asyncio
+async def test_one_concurrent_completion_does_not_clear_another_active_run():
+    manager = SSEManager(replay_buffer_size=0)
+    for run_id in ('one', 'two'):
+        await manager.broadcast_event(SSEEvent(
+            event_type='consolidation_started',
+            data={'time_horizon': 'weekly', 'run_id': run_id},
+        ))
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_progress',
+        data={'time_horizon': 'weekly', 'run_id': 'two',
+              'phase': 'clustering', 'completed': 3, 'total': 4},
+    ))
+    await manager.broadcast_event(SSEEvent(
+        event_type='consolidation_completed',
+        data={'time_horizon': 'weekly', 'run_id': 'one', 'success': True},
+    ))
+    late = await manager.add_connection('late', _FakeRequest())
+    events = await _drain(late)
+    assert [event.data.get('run_id') for event in events[1:]] == ['two', 'two']
+    assert events[-1].data['completed'] == 3

@@ -33,6 +33,7 @@ Performance:
 
 import logging
 import time
+from uuid import uuid4
 from typing import Optional, Union, List
 from .types import (
     CompactMemory, CompactSearchResult, CompactHealthInfo,
@@ -295,11 +296,14 @@ async def _consolidate_async(time_horizon: str) -> CompactConsolidationResult:
     from ..consolidation.progress import notify_consolidation
 
     success = False
-    await notify_consolidation('consolidation_started', {'time_horizon': time_horizon})
+    run_id = uuid4().hex
+    await notify_consolidation('consolidation_started', {
+        'time_horizon': time_horizon, 'run_id': run_id,
+    })
 
     async def progress(phase: str, completed: int, total: int, selected: int) -> None:
         await notify_consolidation('consolidation_progress', {
-            'time_horizon': time_horizon, 'phase': phase,
+            'time_horizon': time_horizon, 'run_id': run_id, 'phase': phase,
             'completed': completed, 'total': total, 'memories_selected': selected,
         })
 
@@ -351,7 +355,7 @@ async def _consolidate_async(time_horizon: str) -> CompactConsolidationResult:
 
     finally:
         await notify_consolidation('consolidation_completed', {
-            'time_horizon': time_horizon, 'success': success,
+            'time_horizon': time_horizon, 'run_id': run_id, 'success': success,
         })
 
 

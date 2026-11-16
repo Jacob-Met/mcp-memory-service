@@ -489,3 +489,14 @@ test('consolidation text keys exist in all locale catalogs', () => {
         assert.deepEqual(keys.filter((key) => !catalog[key]), [], file);
     }
 });
+
+test('two concurrent consolidation runs at the same horizon have separate status rows', () => {
+    const { app, model } = syncDashboard();
+    app.handleConsolidationStarted({ time_horizon: 'weekly', run_id: 'one' });
+    app.handleConsolidationStarted({ time_horizon: 'weekly', run_id: 'two' });
+    app.handleConsolidationProgress({ time_horizon: 'weekly', run_id: 'two', completed: 2, total: 4 });
+    app.handleConsolidationCompleted({ time_horizon: 'weekly', run_id: 'one', success: true });
+    assert.equal(model.get('consolidation-two').state, 'busy');
+    assert.equal(model.get('consolidation-two').text.vars.completed, 2);
+    assert.equal(model.get('consolidation-one').state, 'success');
+});

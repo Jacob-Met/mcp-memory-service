@@ -21,6 +21,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 try:
     from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
@@ -886,6 +887,7 @@ class ConsolidationScheduler:
     async def _run_consolidation_job(self, time_horizon: str):
         """Execute a consolidation job for the specified time horizon."""
         job_start_time = datetime.now()
+        run_id = uuid4().hex
         self.logger.info("Starting scheduled %s consolidation", _sanitize_log_value(time_horizon))
 
         from .progress import notify_consolidation as notify
@@ -893,13 +895,14 @@ class ConsolidationScheduler:
         async def progress(phase: str, completed: int, total: int, selected: int) -> None:
             await notify("consolidation_progress", {
                 "time_horizon": time_horizon,
+                "run_id": run_id,
                 "phase": phase,
                 "completed": completed,
                 "total": total,
                 "memories_selected": selected,
             })
 
-        await notify("consolidation_started", {"time_horizon": time_horizon})
+        await notify("consolidation_started", {"time_horizon": time_horizon, "run_id": run_id})
         try:
             # Run the consolidation
             report = await self.consolidator.consolidate(
@@ -1009,6 +1012,7 @@ class ConsolidationScheduler:
             # Consolidation can change counts even if a later step fails.
             await notify("consolidation_completed", {
                 "time_horizon": time_horizon,
+                "run_id": run_id,
                 "success": job_record["status"] == "success",
             })
 
