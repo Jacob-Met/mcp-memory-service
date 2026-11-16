@@ -53,7 +53,7 @@ def test_health_failure_log_does_not_carry_newlines(caplog, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_consolidation_failure_log_does_not_carry_newlines(caplog, monkeypatch):
-    async def broken(_horizon):
+    async def broken(_horizon, **_kwargs):
         raise RuntimeError(f"consolidator gone\n{FORGED}")
 
     monkeypatch.setattr(operations, "get_consolidator", lambda: SimpleNamespace(consolidate=broken))

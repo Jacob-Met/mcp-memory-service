@@ -888,19 +888,7 @@ class ConsolidationScheduler:
         job_start_time = datetime.now()
         self.logger.info("Starting scheduled %s consolidation", _sanitize_log_value(time_horizon))
 
-        async def notify(event_type: str, data: dict) -> None:
-            # Monitoring must never interrupt or change a consolidation result.
-            try:
-                from ..web.sse import SSEEvent, sse_manager
-
-                await sse_manager.broadcast_event(
-                    SSEEvent(event_type=event_type, data=data)
-                )
-            except Exception as exc:
-                self.logger.debug(
-                    "Unable to notify dashboard of consolidation: %s",
-                    _sanitize_log_value(exc),
-                )
+        from .progress import notify_consolidation as notify
 
         async def progress(phase: str, completed: int, total: int, selected: int) -> None:
             await notify("consolidation_progress", {
