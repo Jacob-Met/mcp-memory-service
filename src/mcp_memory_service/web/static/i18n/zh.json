@@ -744,5 +744,10 @@
   "sync.notAvailable": "不可用",
   "sync.unknown": "未知",
   "manage.tags.minimumCount": "显示至少使用 N 次的标签",
-  "manage.tags.showingCount": "显示 {shown} 个标签，共 {total} 个"
+  "manage.tags.showingCount": "显示 {shown} 个标签，共 {total} 个",
+  "island.source.consolidation": "记忆整合",
+  "consolidation.status.running": "正在整合记忆",
+  "consolidation.status.stages": "已完成 {completed}/{total} 个阶段",
+  "consolidation.status.complete": "整合已完成",
+  "consolidation.status.failed": "整合失败"
 }

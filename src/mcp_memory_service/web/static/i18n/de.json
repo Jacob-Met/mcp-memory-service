@@ -744,5 +744,10 @@
   "toast.uploadStartedBatch": "Batch-Upload gestartet für {count} Dateien",
   "toast.uploadStartedSingle": "Upload gestartet für {name}",
   "manage.tags.minimumCount": "Tags anzeigen, die mindestens N-mal verwendet werden",
-  "manage.tags.showingCount": "{shown} von {total} Tags werden angezeigt"
+  "manage.tags.showingCount": "{shown} von {total} Tags werden angezeigt",
+  "island.source.consolidation": "Speicherkonsolidierung",
+  "consolidation.status.running": "Erinnerungen werden konsolidiert",
+  "consolidation.status.stages": "{completed} von {total} Phasen abgeschlossen",
+  "consolidation.status.complete": "Konsolidierung abgeschlossen",
+  "consolidation.status.failed": "Konsolidierung fehlgeschlagen"
 }

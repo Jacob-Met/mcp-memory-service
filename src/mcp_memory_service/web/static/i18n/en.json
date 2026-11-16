@@ -744,5 +744,10 @@
   "settings.quality.loadFailed": "✗ Could not load the current settings: {error}. Reopen this tab to retry.",
   "settings.quality.saveHint": "Saved to .env. The server restarts to apply the change.",
   "manage.tags.minimumCount": "Show tags used at least N times",
-  "manage.tags.showingCount": "Showing {shown} of {total} tags"
+  "manage.tags.showingCount": "Showing {shown} of {total} tags",
+  "island.source.consolidation": "Memory consolidation",
+  "consolidation.status.running": "Consolidating memories",
+  "consolidation.status.stages": "{completed} of {total} stages finished",
+  "consolidation.status.complete": "Consolidation complete",
+  "consolidation.status.failed": "Consolidation failed"
 }

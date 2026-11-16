@@ -612,3 +612,23 @@ class TestForgettingCandidatesRealStorage:
             for call in consolidator.forgetting_engine.process.call_args_list
         ]
         assert seen == [{"800 days old"}, {"400 days old"}]
+
+
+@pytest.mark.asyncio
+async def test_phase_progress_counts_actual_pipeline_steps(mock_storage, consolidation_config):
+    """Progress reports completed stages, not invented time percentages."""
+    consolidator = DreamInspiredConsolidator(mock_storage, consolidation_config)
+    progress = []
+
+    async def capture(phase, completed, total, selected):
+        progress.append((phase, completed, total, selected))
+
+    report = await consolidator.consolidate("weekly", progress_callback=capture)
+    assert report.memories_processed > 0
+    assert progress
+    total = progress[0][2]
+    assert [p[1] for p in progress] == list(range(1, total + 1))
+    assert all(p[2] == total for p in progress)
+    assert all(p[3] == report.memories_processed for p in progress)
+    assert len({p[0] for p in progress}) == total
+    assert progress[-1][0] == "finalization"

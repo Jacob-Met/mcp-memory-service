@@ -744,5 +744,10 @@
   "settings.quality.loadFailed": "✗ Tidak dapat memuat pengaturan saat ini: {error}. Buka kembali tab ini untuk mencoba lagi.",
   "settings.quality.saveHint": "Disimpan ke .env. Server akan dimulai ulang untuk menerapkan perubahan.",
   "manage.tags.minimumCount": "Tampilkan tag yang digunakan setidaknya N kali",
-  "manage.tags.showingCount": "Menampilkan {shown} dari {total} tag"
+  "manage.tags.showingCount": "Menampilkan {shown} dari {total} tag",
+  "island.source.consolidation": "Konsolidasi memori",
+  "consolidation.status.running": "Memori sedang dikonsolidasikan",
+  "consolidation.status.stages": "{completed} dari {total} tahap selesai",
+  "consolidation.status.complete": "Konsolidasi selesai",
+  "consolidation.status.failed": "Konsolidasi gagal"
 }

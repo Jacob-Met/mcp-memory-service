@@ -744,5 +744,10 @@
   "toast.uploadStartedBatch": "{count}개 파일의 일괄 업로드를 시작했습니다",
   "toast.uploadStartedSingle": "{name} 업로드를 시작했습니다",
   "manage.tags.minimumCount": "N회 이상 사용된 태그 표시",
-  "manage.tags.showingCount": "전체 {total}개 중 {shown}개 태그 표시"
+  "manage.tags.showingCount": "전체 {total}개 중 {shown}개 태그 표시",
+  "island.source.consolidation": "메모리 통합",
+  "consolidation.status.running": "메모리를 통합하는 중",
+  "consolidation.status.stages": "{total}단계 중 {completed}단계 완료",
+  "consolidation.status.complete": "통합 완료",
+  "consolidation.status.failed": "통합 실패"
 }

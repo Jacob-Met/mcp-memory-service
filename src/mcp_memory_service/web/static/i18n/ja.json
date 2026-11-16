@@ -744,5 +744,10 @@
   "toast.uploadStartedBatch": "{count} ファイルのバッチアップロードを開始しました",
   "toast.uploadStartedSingle": "{name} のアップロードを開始しました",
   "manage.tags.minimumCount": "N回以上使用されたタグを表示",
-  "manage.tags.showingCount": "{total}個中{shown}個のタグを表示"
+  "manage.tags.showingCount": "{total}個中{shown}個のタグを表示",
+  "island.source.consolidation": "メモリの統合",
+  "consolidation.status.running": "メモリを統合しています",
+  "consolidation.status.stages": "{total}段階中{completed}段階が完了",
+  "consolidation.status.complete": "統合が完了しました",
+  "consolidation.status.failed": "統合に失敗しました"
 }

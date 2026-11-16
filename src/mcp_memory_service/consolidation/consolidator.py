@@ -15,7 +15,9 @@
 """Main dream-inspired consolidation orchestrator."""
 
 import inspect
-from typing import List, Dict, Any, Optional, Protocol, Sequence, Tuple
+from typing import (
+    Any, Awaitable, Callable, Dict, List, Optional, Protocol, Sequence, Tuple,
+)
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import asyncio
@@ -49,6 +51,9 @@ from ..compat import _sanitize_log_value
 from ..utils.time_parser import memory_statement_time
 
 logger = logging.getLogger(__name__)
+
+# phase, completed phases, planned phases, selected memories
+ConsolidationProgress = Callable[[str, int, int, int], Awaitable[None]]
 
 
 def _said_at(memory: Memory) -> float:
@@ -387,12 +392,17 @@ class DreamInspiredConsolidator:
             self.logger.debug("BASE_DIR unavailable for consolidation run tracker")
         return None
 
-    async def consolidate(self, time_horizon: str, **kwargs) -> ConsolidationReport:
+    async def consolidate(
+        self, time_horizon: str,
+        progress_callback: Optional[ConsolidationProgress] = None,
+        **kwargs,
+    ) -> ConsolidationReport:
         """
         Run full consolidation pipeline for given time horizon.
 
         Args:
             time_horizon: 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'
+            progress_callback: Optional async observer receiving measured phase counts.
             **kwargs: Additional parameters for consolidation
 
         Returns:
@@ -424,7 +434,8 @@ class DreamInspiredConsolidator:
             # Use context manager for sync pause/resume
             async with SyncPauseContext(self.storage, self.logger):
                 return await self._run_consolidation_pass(
-                    report, time_horizon, is_incremental, **kwargs
+                    report, time_horizon, is_incremental,
+                    progress_callback=progress_callback, **kwargs
                 )
 
         except ConsolidationError as e:
@@ -527,6 +538,7 @@ class DreamInspiredConsolidator:
         report: ConsolidationReport,
         time_horizon: str,
         is_incremental: bool,
+        progress_callback: Optional[ConsolidationProgress] = None,
         **kwargs,
     ) -> ConsolidationReport:
         """Run one full pipeline pass inside the sync-pause context."""
@@ -546,11 +558,16 @@ class DreamInspiredConsolidator:
         self.logger.info("✓ Found %s memories to process", len(memories))
 
         # 2-6. Run the conditional consolidation phases
-        await self._run_phase_schedule(memories, time_horizon, report)
+        completed, total = await self._run_phase_schedule(
+            memories, time_horizon, report, progress_callback
+        )
 
-        return await self._finalize_consolidation(
+        report = await self._finalize_consolidation(
             report, memories, is_incremental
         )
+        if progress_callback:
+            await progress_callback("finalization", completed + 1, total, len(memories))
+        return report
 
     async def _acquire_incremental_slot(self, time_horizon: str) -> bool:
         """Initialize the run tracker and acquire the incremental slot.
@@ -580,43 +597,64 @@ class DreamInspiredConsolidator:
         memories: List[Memory],
         time_horizon: str,
         report: ConsolidationReport,
-    ) -> None:
-        """Run the conditional consolidation phases (1-6) and update *report*."""
+        progress_callback: Optional[ConsolidationProgress] = None,
+    ) -> tuple[int, int]:
+        """Run eligible stages and count completed stages, including finalization.
+
+        The denominator is a real count of planned stages, not a duration estimate.
+        Compression may be a no-op when clustering produces no clusters; that
+        stage is still visited and counted once, without claiming memories were
+        compressed. One event per eligible stage bounds SSE traffic on large DBs.
+        """
+        enabled = {
+            "relevance": self.config.decay_enabled,
+            "clustering": self.config.clustering_enabled and check_horizon_requirements(
+                time_horizon, "clustering", self.ENABLED_PHASES
+            ),
+            "associations": self.config.associations_enabled and check_horizon_requirements(
+                time_horizon, "associations", self.ENABLED_PHASES
+            ),
+            "compression": self.config.compression_enabled and check_horizon_requirements(
+                time_horizon, "compression", self.ENABLED_PHASES
+            ),
+            "forgetting": self.config.forgetting_enabled and check_horizon_requirements(
+                time_horizon, "forgetting", self.ENABLED_PHASES
+            ),
+        }
+        total = sum(enabled.values()) + 1  # finalization
+        completed = 0
+
+        async def phase_done(name: str) -> None:
+            nonlocal completed
+            if enabled[name]:
+                completed += 1
+                if progress_callback:
+                    await progress_callback(name, completed, total, len(memories))
+
         await self._run_relevance_phase(memories, time_horizon)
+        await phase_done("relevance")
 
         clusters: list = []
-        if self.config.clustering_enabled and check_horizon_requirements(
-            time_horizon, "clustering", self.ENABLED_PHASES
-        ):
+        if enabled["clustering"]:
             clusters = await self._run_clustering_phase(memories, time_horizon)
             report.clusters_created = len(clusters)
+        await phase_done("clustering")
 
-        if self.config.associations_enabled and check_horizon_requirements(
-            time_horizon, "associations", self.ENABLED_PHASES
-        ):
-            associations = await self._run_associations_phase(
-                memories, time_horizon
-            )
+        if enabled["associations"]:
+            associations = await self._run_associations_phase(memories, time_horizon)
             report.associations_discovered = len(associations)
+        await phase_done("associations")
 
-        if (
-            self.config.compression_enabled
-            and clusters
-            and check_horizon_requirements(
-                time_horizon, "compression", self.ENABLED_PHASES
-            )
-        ):
-            compression_results = await self._run_compression_phase(
-                clusters, memories
-            )
+        if enabled["compression"] and clusters:
+            compression_results = await self._run_compression_phase(clusters, memories)
             report.memories_compressed = len(compression_results)
+        await phase_done("compression")
 
-        # Forgetting gets its own candidate selector that reaches beyond the
-        # horizon window into the stale tail (Codeberg #325).
-        if self.config.forgetting_enabled and check_horizon_requirements(
-            time_horizon, "forgetting", self.ENABLED_PHASES
-        ):
+        # Forgetting searches the stale tail beyond the selected horizon (#325).
+        if enabled["forgetting"]:
             await self._run_forgetting_phase(time_horizon, report)
+        await phase_done("forgetting")
+        return completed, total
 
     async def _finalize_consolidation(
         self,

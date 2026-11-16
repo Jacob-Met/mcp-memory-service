@@ -744,5 +744,10 @@
   "toast.uploadStartedBatch": "Téléchargement par lot démarré pour {count} fichiers",
   "toast.uploadStartedSingle": "Téléchargement démarré pour {name}",
   "manage.tags.minimumCount": "Afficher les tags utilisés au moins N fois",
-  "manage.tags.showingCount": "Affichage de {shown} tags sur {total}"
+  "manage.tags.showingCount": "Affichage de {shown} tags sur {total}",
+  "island.source.consolidation": "Consolidation des souvenirs",
+  "consolidation.status.running": "Consolidation des souvenirs en cours",
+  "consolidation.status.stages": "{completed} étapes sur {total} terminées",
+  "consolidation.status.complete": "Consolidation terminée",
+  "consolidation.status.failed": "Échec de la consolidation"
 }
