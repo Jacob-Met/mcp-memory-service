@@ -1872,6 +1872,41 @@ body.dark-mode .form-group label {
     50% { opacity: 0.5; }
 }
 
+/* Tabs exceed the viewport on both phones and narrow desktop windows.
+   Constrain the grid child, then scroll its single navigation row in place. */
+@media (max-width: 1100px) {
+    /* Grid items otherwise use the rail's intrinsic width, making the entire
+       page 1000px wide on a phone despite the rail's own overflow. */
+    .main-nav {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    /* Keep all destinations on one swipeable, keyboard-scrollable row.
+       Wrapping hid the actual dashboard below four rows of navigation. */
+    .nav-container {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 0 var(--space-4);
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-item {
+        flex: none;
+        white-space: nowrap;
+        padding: var(--space-3) var(--space-4);
+        scroll-snap-align: start;
+    }
+
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .header-content {
@@ -1891,11 +1926,6 @@ body.dark-mode .form-group label {
 
     .btn-text {
         display: none;
-    }
-
-    .nav-container {
-        flex-wrap: wrap;
-        justify-content: center;
     }
 
     .dashboard-grid {
