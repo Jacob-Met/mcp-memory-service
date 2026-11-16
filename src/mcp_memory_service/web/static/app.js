@@ -1929,11 +1929,13 @@ class MemoryDashboard {
         });
     }
 
-    /** One island row per scheduled horizon; phase counts are not time estimates. */
+    /** One row per run; a manual and scheduled run may share a horizon. */
     _reportConsolidation(data, entry) {
         const horizons = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'incremental'];
         if (!this.statusIsland || !horizons.includes(data?.time_horizon)) return;
-        this.statusIsland.report(`consolidation-${data.time_horizon}`, {
+        const runKey = typeof data.run_id === 'string' && data.run_id.length > 0 && data.run_id.length <= 64
+            ? data.run_id : data.time_horizon;
+        this.statusIsland.report(`consolidation-${runKey}`, {
             ...entry,
             label: { key: 'island.source.consolidation', fallback: 'Memory consolidation' },
         });

@@ -56,6 +56,12 @@ def capture_sse(monkeypatch):
     return manager
 
 
+def _without_run_id(event):
+    """Keep exact event payload assertions while checking the live run identity."""
+    assert isinstance(event.data.get('run_id'), str) and event.data['run_id']
+    return {key: value for key, value in event.data.items() if key != 'run_id'}
+
+
 # --- Event helper ---
 
 
@@ -173,7 +179,7 @@ async def test_consolidation_notifies_dashboard(capture_sse):
     await sched._run_consolidation_job('daily')
     assert capture_sse.events[0].event_type == 'consolidation_started'
     assert capture_sse.events[-1].event_type == 'consolidation_completed'
-    assert capture_sse.events[-1].data == {'time_horizon': 'daily', 'success': True}
+    assert _without_run_id(capture_sse.events[-1]) == {'time_horizon': 'daily', 'success': True}
 
 
 @pytest.mark.asyncio
@@ -268,7 +274,7 @@ async def test_consolidation_announces_start_before_work(capture_sse):
 
     async def consolidate(horizon, **kwargs):
         assert capture_sse.events[0].event_type == "consolidation_started"
-        assert capture_sse.events[0].data == {"time_horizon": horizon}
+        assert _without_run_id(capture_sse.events[0]) == {"time_horizon": horizon}
         return MagicMock()
 
     sched.consolidator.consolidate = AsyncMock(side_effect=consolidate)
@@ -291,7 +297,7 @@ async def test_consolidation_forwards_measured_phase_progress(capture_sse):
     assert [event.event_type for event in capture_sse.events] == [
         "consolidation_started", "consolidation_progress", "consolidation_completed"
     ]
-    assert capture_sse.events[1].data == {
+    assert _without_run_id(capture_sse.events[1]) == {
         "time_horizon": "weekly",
         "phase": "clustering",
         "completed": 2,
@@ -348,11 +354,12 @@ async def test_manually_triggered_consolidation_reports_live_phase_counts(monkey
     assert [event.event_type for event in capture_sse.events] == [
         'consolidation_started', 'consolidation_progress', 'consolidation_completed',
     ]
-    assert capture_sse.events[1].data == {
+    assert _without_run_id(capture_sse.events[1]) == {
         'time_horizon': 'weekly', 'phase': 'compression', 'completed': 2,
         'total': 4, 'memories_selected': 12,
     }
-    assert capture_sse.events[-1].data == {'time_horizon': 'weekly', 'success': True}
+    assert _without_run_id(capture_sse.events[-1]) == {'time_horizon': 'weekly', 'success': True}
+    assert len({e.data['run_id'] for e in capture_sse.events}) == 1
 
 
 @pytest.mark.asyncio
@@ -368,7 +375,7 @@ async def test_failed_manual_consolidation_always_ends_live_status(monkeypatch, 
     assert [event.event_type for event in capture_sse.events] == [
         'consolidation_started', 'consolidation_completed',
     ]
-    assert capture_sse.events[-1].data == {'time_horizon': 'daily', 'success': False}
+    assert _without_run_id(capture_sse.events[-1]) == {'time_horizon': 'daily', 'success': False}
 
 
 @pytest.mark.asyncio
@@ -418,3 +425,18 @@ async def test_consolidation_dashboard_delivery_failure_never_fails_manual_run(m
     monkeypatch.setattr(operations, 'get_consolidator', lambda: Consolidator())
     result = await operations._consolidate_async('daily')
     assert result.status == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_consolidation_events_share_unique_run_identity(capture_sse):
+    sched = _make_scheduler()
+
+    async def consolidate(_horizon, *, progress_callback):
+        await progress_callback('clustering', 1, 4, 5)
+        return MagicMock()
+
+    sched.consolidator.consolidate = consolidate
+    await sched._run_consolidation_job('weekly')
+    ids = [e.data.get('run_id') for e in capture_sse.events]
+    assert all(isinstance(run_id, str) and run_id for run_id in ids)
+    assert len(set(ids)) == 1

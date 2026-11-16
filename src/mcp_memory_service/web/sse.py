@@ -278,19 +278,22 @@ class SSEManager:
     async def broadcast_event(self, event: SSEEvent, connection_filter: Optional[Set[str]] = None):
         """Broadcast an event to all or filtered connections."""
         # A filtered event never becomes visible to other (later) clients.
-        # Retain only a small current-state view, not the full event history.
+        # Distinct manual and scheduled runs can overlap in one horizon; their
+        # completions must not erase each other's active state.
         if connection_filter is None and event.store is None:
             horizon = event.data.get('time_horizon')
             if isinstance(horizon, str) and horizon in (
                 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'incremental'
             ):
+                run_id = event.data.get('run_id')
+                key = run_id if isinstance(run_id, str) and 0 < len(run_id) <= 64 else horizon
                 if event.event_type == 'consolidation_started':
-                    self._active_consolidations[horizon] = {'start': event}
+                    self._active_consolidations[key] = {'start': event}
                 elif event.event_type == 'consolidation_progress':
-                    state = self._active_consolidations.setdefault(horizon, {})
+                    state = self._active_consolidations.setdefault(key, {})
                     state['progress'] = event
                 elif event.event_type == 'consolidation_completed':
-                    self._active_consolidations.pop(horizon, None)
+                    self._active_consolidations.pop(key, None)
 
         # Buffer only globally broadcast, non-heartbeat events:
         # - Filtered broadcasts targeted specific live connections; replaying
