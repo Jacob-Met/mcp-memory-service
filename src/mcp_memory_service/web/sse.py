@@ -98,6 +98,10 @@ class SSEManager:
         # Connection-scoped events (welcome/close) and heartbeats are excluded;
         # only events every consumer sees are eligible. maxlen=0 disables replay.
         self._replay_buffer: deque = deque(maxlen=max(0, replay_buffer_size))
+        # Fresh dashboard connections need the *current* consolidation, not
+        # unrelated stored-memory history from the Last-Event-ID replay ring.
+        # One start and latest measured phase per active horizon is bounded.
+        self._active_consolidations: Dict[str, Dict[str, SSEEvent]] = {}
         
     async def start(self):
         """Start the SSE manager and heartbeat task."""
@@ -118,6 +122,9 @@ class SSEManager:
                 await self._heartbeat_task
             except asyncio.CancelledError:
                 pass  # Expected when heartbeat task is cancelled during shutdown
+
+        # A restarted SSE manager must not present an old run as live.
+        self._active_consolidations.clear()
 
         # Close all connections
         for connection_id in list(self.connections.keys()):
@@ -189,6 +196,20 @@ class SSEManager:
                 _sanitize_log_value(last_event_id),
             )
 
+        # A page opened midway through a run has no Last-Event-ID. Replaying
+        # arbitrary memory events would leak history; send only the running
+        # consolidation's most recent bounded state, after replay when present.
+        replayed_ids = {event.event_id for event in events_to_replay}
+        for state in self._active_consolidations.values():
+            # Replaying the latest event already restores the entire visible
+            # state. Sending an older start afterward would reset progress.
+            latest = state.get('progress', state.get('start'))
+            if latest is not None and latest.event_id in replayed_ids:
+                continue
+            for event in state.values():
+                if event.event_id not in replayed_ids:
+                    await queue.put(event)
+
         return queue
 
     def _resolve_replay(
@@ -256,6 +277,21 @@ class SSEManager:
     
     async def broadcast_event(self, event: SSEEvent, connection_filter: Optional[Set[str]] = None):
         """Broadcast an event to all or filtered connections."""
+        # A filtered event never becomes visible to other (later) clients.
+        # Retain only a small current-state view, not the full event history.
+        if connection_filter is None and event.store is None:
+            horizon = event.data.get('time_horizon')
+            if isinstance(horizon, str) and horizon in (
+                'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'incremental'
+            ):
+                if event.event_type == 'consolidation_started':
+                    self._active_consolidations[horizon] = {'start': event}
+                elif event.event_type == 'consolidation_progress':
+                    state = self._active_consolidations.setdefault(horizon, {})
+                    state['progress'] = event
+                elif event.event_type == 'consolidation_completed':
+                    self._active_consolidations.pop(horizon, None)
+
         # Buffer only globally broadcast, non-heartbeat events:
         # - Filtered broadcasts targeted specific live connections; replaying
         #   them to a different reconnecting client would expand the audience.
