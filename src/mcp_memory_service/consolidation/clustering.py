@@ -14,6 +14,7 @@
 
 """Semantic clustering system for memory organization."""
 
+import asyncio
 import uuid
 import numpy as np
 from typing import List, Dict
@@ -220,46 +221,51 @@ class SemanticClusteringEngine(ConsolidationBase):
         return labels
     
     async def _simple_clustering(self, embeddings: np.ndarray) -> np.ndarray:
-        """Simple fallback clustering using cosine similarity threshold."""
+        """Greedy cosine grouping without quadratic Python loops.
+
+        Keep the existing seed order, minimum size, and retryable noise rules.
+        A NumPy reduction scans each remaining row in native code and norms
+        are computed once. This uses O(n) extra storage, not an O(n²) distance
+        matrix, and yields periodically so consolidation SSE stays responsive.
+        """
         n_samples = embeddings.shape[0]
-        labels = np.full(n_samples, -1)  # Start with all as noise
+        labels = np.full(n_samples, -1)
+        norms = np.linalg.norm(embeddings, axis=1)
         current_cluster = 0
-        
-        similarity_threshold = 0.7  # Threshold for grouping
-        
+        similarity_threshold = 0.7
+
         for i in range(n_samples):
-            if labels[i] != -1:  # Already assigned
+            if labels[i] != -1:
                 continue
-            
-            # Start new cluster
-            cluster_members = [i]
+
             labels[i] = current_cluster
-            
-            # Find similar memories
-            for j in range(i + 1, n_samples):
-                if labels[j] != -1:  # Already assigned
-                    continue
-                
-                # Calculate cosine similarity
-                similarity = np.dot(embeddings[i], embeddings[j]) / (
-                    np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j])
-                )
-                
-                if similarity >= similarity_threshold:
-                    labels[j] = current_cluster
-                    cluster_members.append(j)
-            
-            # Only keep cluster if it meets minimum size
-            if len(cluster_members) >= self.min_cluster_size:
+            tail_labels = labels[i + 1:]
+            # A rejected seed's members become noise again. They must remain
+            # eligible for later seeds, exactly as with the scalar fallback.
+            matching = np.zeros(len(tail_labels), dtype=bool)
+            if np.any(tail_labels == -1):
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    similarities = np.einsum(
+                        "ij,j->i", embeddings[i + 1:], embeddings[i]
+                    ) / (norms[i + 1:] * norms[i])
+                matching = (tail_labels == -1) & (similarities >= similarity_threshold)
+                tail_labels[matching] = current_cluster
+
+            if 1 + int(np.count_nonzero(matching)) >= self.min_cluster_size:
                 current_cluster += 1
             else:
-                # Mark as noise
-                for member in cluster_members:
-                    labels[member] = -1
-        
-        self.logger.debug("Simple clustering: threshold=%s, found %s clusters", similarity_threshold, current_cluster)
+                labels[i] = -1
+                tail_labels[matching] = -1
+
+            if i and i % 64 == 0:
+                await asyncio.sleep(0)
+
+        self.logger.debug(
+            "Simple clustering: threshold=%s, found %s clusters",
+            similarity_threshold, current_cluster,
+        )
         return labels
-    
+
     async def _create_clusters(
         self,
         memories: List[Memory],

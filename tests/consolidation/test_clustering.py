@@ -1,5 +1,7 @@
 """Unit tests for the semantic clustering engine."""
 
+import asyncio
+
 import pytest
 import numpy as np
 from datetime import datetime, timedelta
@@ -445,3 +447,67 @@ class TestSemanticClusteringEngine:
             assert isinstance(tag_dist, dict)
             assert tag_dist.get("python", 0) >= 2  # Appears multiple times
             assert tag_dist.get("programming", 0) >= 2  # Appears multiple times
+
+def _simple_clustering_reference(embeddings: np.ndarray, min_cluster_size: int) -> np.ndarray:
+    """Legacy seed-order greedy grouping: precision and noise behavior are the contract."""
+    labels = np.full(len(embeddings), -1)
+    cluster = 0
+    for i in range(len(embeddings)):
+        if labels[i] != -1:
+            continue
+        members = [i]
+        labels[i] = cluster
+        for j in range(i + 1, len(embeddings)):
+            if labels[j] != -1:
+                continue
+            with np.errstate(divide='ignore', invalid='ignore'):
+                similarity = np.dot(embeddings[i], embeddings[j]) / (
+                    np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j])
+                )
+            if similarity >= 0.7:
+                labels[j] = cluster
+                members.append(j)
+        if len(members) >= min_cluster_size:
+            cluster += 1
+        else:
+            labels[members] = -1
+    return labels
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("minimum", [2, 3, 5, 7])
+async def test_simple_fallback_preserves_seed_ordered_groups_and_noise(minimum):
+    rng = np.random.default_rng(7418)
+    random = rng.normal(size=(125, 48))
+    random[10:17] = random[0] + rng.normal(scale=0.02, size=(7, 48))
+    random[44:50] = random[30] + rng.normal(scale=0.02, size=(6, 48))
+    random[60] = 0
+    random[61] = 0
+    engine = SemanticClusteringEngine(clustering_mod.ConsolidationConfig(
+        clustering_algorithm="simple", min_cluster_size=minimum,
+    ))
+    expected = _simple_clustering_reference(random, minimum)
+    actual = await engine._simple_clustering(random)
+    np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.asyncio
+async def test_large_simple_fallback_yields_to_live_progress_consumers():
+    """The embedding phase cannot hold an SSE event loop until every seed is scanned."""
+    rng = np.random.default_rng(7419)
+    embeddings = rng.normal(size=(257, 64))
+    engine = SemanticClusteringEngine(clustering_mod.ConsolidationConfig(
+        clustering_algorithm="simple", min_cluster_size=5,
+    ))
+    order = []
+
+    async def cluster():
+        await engine._simple_clustering(embeddings)
+        order.append("complete")
+
+    async def heartbeat():
+        await asyncio.sleep(0)
+        order.append("heartbeat")
+
+    await asyncio.gather(cluster(), heartbeat())
+    assert order == ["heartbeat", "complete"]
