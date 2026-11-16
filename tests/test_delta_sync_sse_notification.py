@@ -10,12 +10,19 @@ Covers the backend half of the issue proposal:
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
 import mcp_memory_service.storage.sync.orchestrator as orch
+from mcp_memory_service.api import operations
 from mcp_memory_service.consolidation.scheduler import ConsolidationScheduler
+from mcp_memory_service.web import sse
+from mcp_memory_service.web.api.consolidation import router
+from mcp_memory_service.web.oauth.middleware import require_write_access
 from mcp_memory_service.web.sse import create_sync_delta_completed_event
 
 
@@ -319,3 +326,95 @@ async def test_consolidation_failure_still_closes_progress(capture_sse):
         "consolidation_started", "consolidation_completed"
     ]
     assert capture_sse.events[-1].data["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_manually_triggered_consolidation_reports_live_phase_counts(monkeypatch, capture_sse):
+    """The HTTP and sync API path must have the same live feedback as scheduled runs."""
+
+    class Consolidator:
+        async def consolidate(self, horizon, *, progress_callback=None):
+            assert horizon == 'weekly'
+            assert progress_callback is not None
+            await progress_callback('compression', 2, 4, 12)
+            return SimpleNamespace(
+                memories_processed=12, memories_compressed=2,
+                memories_archived=1, errors=[],
+            )
+
+    monkeypatch.setattr(operations, 'get_consolidator', lambda: Consolidator())
+    result = await operations._consolidate_async('weekly')
+    assert result.status == 'completed'
+    assert [event.event_type for event in capture_sse.events] == [
+        'consolidation_started', 'consolidation_progress', 'consolidation_completed',
+    ]
+    assert capture_sse.events[1].data == {
+        'time_horizon': 'weekly', 'phase': 'compression', 'completed': 2,
+        'total': 4, 'memories_selected': 12,
+    }
+    assert capture_sse.events[-1].data == {'time_horizon': 'weekly', 'success': True}
+
+
+@pytest.mark.asyncio
+async def test_failed_manual_consolidation_always_ends_live_status(monkeypatch, capture_sse):
+
+    class Consolidator:
+        async def consolidate(self, horizon, *, progress_callback=None):
+            raise RuntimeError('storage unavailable')
+
+    monkeypatch.setattr(operations, 'get_consolidator', lambda: Consolidator())
+    result = await operations._consolidate_async('daily')
+    assert result.status == 'failed'
+    assert [event.event_type for event in capture_sse.events] == [
+        'consolidation_started', 'consolidation_completed',
+    ]
+    assert capture_sse.events[-1].data == {'time_horizon': 'daily', 'success': False}
+
+
+@pytest.mark.asyncio
+async def test_http_trigger_reports_live_events_via_packaged_router(monkeypatch, capture_sse):
+
+
+
+    class Consolidator:
+        async def consolidate(self, horizon, *, progress_callback=None):
+            await progress_callback('compression', 1, 4, 3)
+            return SimpleNamespace(
+                memories_processed=3, memories_compressed=1,
+                memories_archived=0, errors=[],
+            )
+
+    monkeypatch.setattr(operations, 'get_consolidator', lambda: Consolidator())
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_write_access] = lambda: None
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+        response = await client.post('/api/consolidation/trigger', json={'time_horizon': 'daily'})
+    assert response.status_code == 200
+    assert response.json()['status'] == 'completed'
+    assert [event.event_type for event in capture_sse.events] == [
+        'consolidation_started', 'consolidation_progress', 'consolidation_completed',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_consolidation_dashboard_delivery_failure_never_fails_manual_run(monkeypatch):
+
+
+    class UnavailableDashboard:
+        async def broadcast_event(self, event):
+            raise RuntimeError('viewer disconnected')
+
+    class Consolidator:
+        async def consolidate(self, horizon, *, progress_callback=None):
+            await progress_callback('compression', 1, 4, 3)
+            return SimpleNamespace(
+                memories_processed=3, memories_compressed=1,
+                memories_archived=0, errors=[],
+            )
+
+    monkeypatch.setattr(sse, 'sse_manager', UnavailableDashboard())
+    monkeypatch.setattr(operations, 'get_consolidator', lambda: Consolidator())
+    result = await operations._consolidate_async('daily')
+    assert result.status == 'completed'

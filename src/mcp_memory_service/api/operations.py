@@ -292,13 +292,25 @@ async def _consolidate_async(time_horizon: str) -> CompactConsolidationResult:
             "Start the HTTP server first."
         )
 
+    from ..consolidation.progress import notify_consolidation
+
+    success = False
+    await notify_consolidation('consolidation_started', {'time_horizon': time_horizon})
+
+    async def progress(phase: str, completed: int, total: int, selected: int) -> None:
+        await notify_consolidation('consolidation_progress', {
+            'time_horizon': time_horizon, 'phase': phase,
+            'completed': completed, 'total': total, 'memories_selected': selected,
+        })
+
     try:
         # Record start time
         start_time = time.time()
 
         # Run consolidation
         logger.info("Running %s consolidation...", _sanitize_log_value(time_horizon))
-        result = await consolidator.consolidate(time_horizon)
+        result = await consolidator.consolidate(time_horizon, progress_callback=progress)
+        success = not result.errors
 
         # Calculate duration
         duration = time.time() - start_time
@@ -336,6 +348,11 @@ async def _consolidate_async(time_horizon: str) -> CompactConsolidationResult:
             forgotten=0,
             duration=0.0
         )
+
+    finally:
+        await notify_consolidation('consolidation_completed', {
+            'time_horizon': time_horizon, 'success': success,
+        })
 
 
 @sync_wrapper
